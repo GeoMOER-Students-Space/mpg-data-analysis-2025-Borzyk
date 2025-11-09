@@ -1,6 +1,6 @@
 ---
 title: "Assignment 3"
-author: "Tobias"
+author: "Borzyk"
 date: "2025-11-09"
 output: html_document
 ---
@@ -21,9 +21,15 @@ Holzeinschlag_Hessen <- Holzeinschlag_Hessen[-19, ]
 
 ### 2. Create a simple visualization which gives a quick, temporally non explicit and descriptive statistical overview of the harvest by tree type and as a total over all trees (i.e. a similar kind of information as provided by the summary function).
 
+#Ein statistischer Überblick
 ```{r}
 summary(Holzeinschlag_Hessen)
-?color
+
+```
+
+#Als Graphik
+
+```{r}
 boxplot(Holzeinschlag_Hessen[,c(3,4,2,5,6,7)],
         main = "Jährlicher Holzeinschlag Hessens 1997-2014", 
         xlab="Baumart ", 
