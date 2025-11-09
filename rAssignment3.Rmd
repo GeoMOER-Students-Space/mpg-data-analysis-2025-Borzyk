@@ -1,0 +1,90 @@
+---
+title: "Assignment"
+author: "Tobias"
+date: "2025-11-09"
+output: html_document
+---
+
+### 1. Read the data provided in the Excel file and “isolate” the tabulated information into a data.frame class.
+
+```{r}
+Holzeinschlag_Hessen <- read.csv(
+  file = "C:/Users/Tobias/Documents/GEOmaster/Data_Analysis/data/hessen_holzeinschlag_1997-2014.csv",
+  header = TRUE,
+  sep = ";",
+  skip = 4 ,
+  encoding = "latin1")
+
+Holzeinschlag_Hessen <- Holzeinschlag_Hessen[-19, ]
+
+```
+
+### 2. Create a simple visualization which gives a quick, temporally non explicit and descriptive statistical overview of the harvest by tree type and as a total over all trees (i.e. a similar kind of information as provided by the summary function).
+
+```{r}
+summary(Holzeinschlag_Hessen)
+?color
+boxplot(Holzeinschlag_Hessen[,c(3,4,2,5,6,7)],
+        main = "Jährlicher Holzeinschlag Hessens 1997-2014", 
+        xlab="Baumart ", 
+        ylab="Holzeinschlag (m³)", 
+        col = "brown4"
+        ) 
+```
+
+### 3. Create another visualization which - in the same figure panel - shows how each beech harvest over the time span is related to each of the oak, pine, spruce and colored wood harvests in a 2 by 2 grid (i.e. arrange the figures in a 2 columns and 2 rows layout).
+
+```{r}
+par(mfrow = c(2,2))
+
+plot(x = Holzeinschlag_Hessen$Buntholz,
+     y = Holzeinschlag_Hessen$Buche,
+     main = "Bucheneinschlag in Korrelation zu Buntholzeinschlag",
+     xlab = "Buntholzeinschlag (m³)",
+     ylab = "Buche (m³)",
+     cex = 1.5,
+     cex.main = 0.8,
+     col = "darkgreen",
+     pch = 16
+     )
+
+plot(x = Holzeinschlag_Hessen$Eiche,
+     y = Holzeinschlag_Hessen$Buche,
+     main = "Bucheneinschlag in Korrelation zu Eicheneinschlag",
+     xlab = "Eiche (m³)",
+     ylab = "Buche (m³)",
+     cex = 1.5,
+     cex.main = 0.8,
+     col = "darkgreen",
+     pch = 16
+     )
+
+plot(x = Holzeinschlag_Hessen$Fichte,
+     y = Holzeinschlag_Hessen$Buche,
+     main = "Bucheneinschlag in Korrelation zu Fichteneinschlag",
+     xlab = "Fichte (m³)",
+     ylab = "Buche (m³)",
+     cex = 1.5,
+     cex.main = 0.8,
+     col = "darkgreen",
+     pch = 16
+     )
+
+plot(x = Holzeinschlag_Hessen$Kiefer,
+     y = Holzeinschlag_Hessen$Buche,
+     main = "Bucheneinschlag in Korrelation zu Kiefereinschlag",
+     xlab = "Kiefer (m³)",
+     ylab = "Buche (m³)",
+     cex = 1.7,
+     cex.main = 0.8,
+     col = "darkgreen",
+     pch = 16
+     )
+
+```
+
+### 4. Include your opinion on what could be the key message of these figures in two sentence max.
+
+```{r}
+print("The data suggest that increasing beech harvesting is accompanied by a concurrent rise in the felling of pine and oak, whereas the extraction of spruce remains comparatively stable. Furthermore, I initially hypothesized that an authorized individual had consulted Wikipedia to ascertain that the so-called “Buntholz” does not constitute a valid taxonomic entity—an assumption which, considering the subsequent establishment date of Wikipedia, regrettably proved to be unfounded.")
+```
