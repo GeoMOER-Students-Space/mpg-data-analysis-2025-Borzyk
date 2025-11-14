@@ -1,0 +1,126 @@
+---
+title: "Assignment 4"
+author: "Borzyk"
+date: "2025-11-13"
+output: html_document
+---
+## Assignment 4
+
+#### Please have look at the data and create a list of tasks you have to cope with in order to clean the data.
+
+Please write an R markdown script which cleans the data set according to your list. The markdown script should roughly describe what you are doing and show the major code structure in addition to some actual data wherever appropriate. After cleaning, all your id variables should be in the left, your data variables in the right columns of the data frame.
+
+Since the cleaning of the administrative area information requires quite a few lines of code, write a function for this takes and save this function in a separate R file (not R markdown) in order to keep the main markdown script clear.
+
+```{r}
+###### Cleaning DATA ############
+Feldfruechte <- read.csv("C:/Users/Tobias/Documents/GEOmaster/Data_Analysis/data/115-46-4_feldfruechte.txt",
+                         skip = 6,
+                         header = TRUE,
+                         sep = ";",
+                         dec = ",",
+                         encoding = "latin1"
+                         )
+### Überschriften umbenennen
+names(Feldfruechte) [names(Feldfruechte) == "X"] <- "Jahr"
+names(Feldfruechte) [names(Feldfruechte) == "X.1"] <- "AGS"
+names(Feldfruechte) [names(Feldfruechte) == "X.2"] <- "Verwaltungseinheit"
+names(Feldfruechte) [names(Feldfruechte) == "Roggen.und.Wintermenggetreide"] <- "Roggen und Wintermenggetreide"
+
+str(Feldfruechte)
+for(c in colnames(Feldfruechte)[4:13]){
+  Feldfruechte[, c][Feldfruechte[, c] == "."] <- NA  
+  Feldfruechte[, c] <- as.numeric(sub(",", ".", Feldfruechte[, c]))
+}
+
+### struktur anschauen
+str(Feldfruechte)
+
+### Die letzten Zeilen entfernen
+Feldfruechte <- Feldfruechte [-c(8926:8930), ]
+print(head(Feldfruechte))
+
+###   wide zu long
+### Die verschiedenen Landwirtschaftswerte in eine Spalte bringen (Pflanze in eine Spalte, Werte in eine Spalte)
+library(reshape2)
+Feldfruechte_long <- reshape2::melt(Feldfruechte, id.vars = c("Jahr", "AGS", "Verwaltungseinheit"))
+head(Feldfruechte_long)
+
+### Überschriften gemeinsam Umändern
+
+names(Feldfruechte_long) <- c("Jahr","AGS","Verwaltungseinheit","Nutzpflanze","Ertrag (dt/ha)")
+
+### Splitten der Information in einer Zeile
+Verwaltungseinheit <- strsplit(Feldfruechte$Verwaltungseinheit, ",")
+head(Verwaltungseinheit)
+
+## dataframe mit 3 Spalten für Bezeichnungen der Verwaltungseinheiten
+Verwaltungseinheit_df <- lapply(Verwaltungseinheit, function(i){
+  p1 <- sub("^\\s+", "", i[1])  # Trim leading white spaces
+  if(length(i) > 2){
+    p2 <- sub("^\\s+", "", i[2])
+    p3 <- sub("^\\s+", "", i[3])
+  } else if (length(i) > 1){
+    p2 <- sub("^\\s+", "", i[2])
+    p3 <- NA
+  } else {
+    p2 <- NA
+    p3 <- NA
+  }
+  data.frame(A = p1,
+             B = p2,
+             C = p3)
+})
+Verwaltungseinheit_df <- do.call("rbind", Verwaltungseinheit_df)
+Verwaltungseinheit_df$AGS <- Feldfruechte$AGS
+Verwaltungseinheit_df$Jahr <- Feldfruechte$Jahr
+
+# Was steht in den einzelnen Spalten?
+unique(Verwaltungseinheit_df[, 2])
+unique(Verwaltungseinheit_df[, 3])
+
+# Was steht bei denen mit Kreisfreier Stadt in Zeile 2?
+unique(Verwaltungseinheit_df$B[!is.na(Verwaltungseinheit_df$C)])
+
+## kreisfreie Stadt wird aus der 3. in die 2. Spalte gewechselt
+Verwaltungseinheit_df[!is.na(Verwaltungseinheit_df$C), ] <- Verwaltungseinheit_df[!is.na(Verwaltungseinheit_df$C), c(1, 3, 2, 4, 5)]
+
+### Was hat weder Landkreis noch Kreisfreie Stadt usw. stehen?
+unique(Feldfruechte$Verwaltungseinheit[is.na(Verwaltungseinheit_df$B)])
+
+### d.h. Alles mit "kreis" im Namen bekommt "Landkreis" in Spalte B
+for(r in seq(nrow(Verwaltungseinheit_df))){
+  if(is.na(Verwaltungseinheit_df$B[r])
+     & grepl("kreis", tolower(Verwaltungseinheit_df$A[r]))){
+    Verwaltungseinheit_df$B[r] <- "Landkreis"
+  }
+  }
+## Was ist über?
+unique(Feldfruechte$Verwaltungseinheit[is.na(Verwaltungseinheit_df$B)])
+
+### Städte in Bayern und Bawü, sowie Bundesländer und Bund
+Verwaltungseinheit_df$B[Verwaltungseinheit_df$AGS == "DG"] <- "Land"
+Verwaltungseinheit_df$B[is.na(Verwaltungseinheit_df$B) & nchar(Verwaltungseinheit_df$AGS) == 2] <- "Bundesland"
+Verwaltungseinheit_df$B[is.na(Verwaltungseinheit_df$B)] <- "Kreisfreie Stadt"
+
+# Ist was über?
+sum(is.na(Verwaltungseinheit_df$B))
+# Ne
+
+Verwaltungseinheit_long_final <- merge(Feldfruechte_long, Verwaltungseinheit_df, by = c("Jahr","AGS"))
+
+# Entfernen der nun doppelten Bezeichnung
+Verwaltungseinheit_long_final$Verwaltungseinheit <- NULL
+
+names(Verwaltungseinheit_long_final) [names(Verwaltungseinheit_long_final) == "A"] <- "Name"
+names(Verwaltungseinheit_long_final) [names(Verwaltungseinheit_long_final) == "B"] <- "LK/Kreisfr. Stadt/ BL"
+names(Verwaltungseinheit_long_final) [names(Verwaltungseinheit_long_final) == "C"] <- "Zusatz"
+### Spalten anordnen
+Verwaltungseinheit_long_final <- Verwaltungseinheit_long_final[,c(2,5,6,7,1,3,4)]
+
+```
+
+
+
+
+---
