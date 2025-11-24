@@ -1,0 +1,105 @@
+---
+title: "Assignment5"
+author: "Tobias Borzyk"
+date: "2025-11-19"
+output: html_document
+---
+Please write an R markdown script which computes a linear regression model that relates the percentage recreation area (dependent variable) to the settlement area and visualize the relationship as a scatter plot with the linear modeled drawn in the same plot. Additionally compute a visualization which allows the assessment of the heteroscedasticity and the normal distribution of the residuals.
+
+Please write exactly one sentence which summarizes the key message of both the heteroscedasticity and normal distribution plot.
+
+Once you have described your data, please have a closer look on the normal distribution assessment. For that, please evaluate how often a normal distribution test on the residuals would reject it’s null-hypothesis if a regression model is not computed on the entire dataset but 100 regression models are computed on 100 sub-samples of the dataset. Each of the 100 sub-samples should contain 50 value pairs chosen randomly from the entire data set. Please state or visualize the result and discuss it with respect to sample design and the reliability of test results (three sentence max).
+
+Save your R functions and Rmd file in your course repository, knitr it, update (i.e. commit) your local repository and publish (i.e. push) it to the GitHub classroom. Make sure that the created html file is also part of your GitHub classroom repository.
+
+So it begins:
+
+## Zunächst eine Übersicht der verschiedenen Werte: Mit welcher Größenordnung haben wir es zu tun?
+```{r}
+```{r, warning = FALSE, message = FALSE}
+Landnutzung <- readRDS("C:/Users/Tobias/Documents/GEOmaster/Data_Analysis/data/lu_clean.rds")
+library("car")
+
+ind <- Landnutzung$Settlement
+dep <- Landnutzung$Recreation
+
+par_org <- par()
+par(mfrow = c(1,2))
+
+hist(ind, main = "Siedlungsfläche", xlab = "Siedlungsflächenanteil (in %)", ylab = "Häufigkeit")
+hist(dep, main = "Erholungsfläche", xlab = "Erholungsflächenanteil (in %)", ylab= "Häufigkeit")
+```
+
+##### Die Daten sind nicht normalverteilt
+
+
+## Lineares Modell - Scatterplot
+
+```{r}
+plot(ind, dep,
+     main = "Zusammenhang zwischen Siedlungs-und Erholungsflächen",
+     xlab = "Siedlungsfläche (in %)",
+     ylab = "Erholungsfläche (in %)",
+     col = "darkgrey",
+     pch = 19)
+
+lmSE <- lm(dep ~ ind)
+
+regLine(lmSE, col = "red")
+text(10, 6, bquote(paste("y"["i"],
+                         " = ",
+                         .(round(lmSE$coefficients[1], 3)),
+                         " + ",
+                         .(round(lmSE$coefficients[2], 3)),
+                         "* x"["i"])))
+
+```
+
+## Prüfen auf Heteroskedastizität
+```{r}
+```{r, warning = FALSE}
+par(par_org)
+plot(lmSE$residuals,
+     main = "Prüfung auf Heteroskedastizität der Resiuden visualisiert",
+     xlab = "Wertepaar",
+     ylab = "Abweichung von der Regressionsgerade",
+     pch = 19,
+     col = "darkgrey")
+abline (h = 0, col = "red", lwd = 1.7)
+```
+
+
+## Normalverteilung der Residuen
+
+```{r}
+qqPlot(lmSE,
+       main = "QQ-Plot der Residuen",
+       col = "darkgrey")
+
+```
+
+Es wirkt, als könnte man von Homoskedastizität ausgehen, bei dem betrachten des QQ-Plots ist eine Normalverteilung eher fraglich.
+
+# Test: Wenn 100 Regressionsmodelle für 100 Subdatasets der Gesamtdaten (Randomisierte 50 Wertepaare als Teildatensätze) geprüft werden, wie oft wird die Nullhypothese verworfen?
+
+```{r}
+set.seed(123)
+Ablehung_Haeufigkeit <- 0
+p_werte <- numeric(100)
+
+for(i in 1:100){
+  idx <- sample(1:nrow(Landnutzung), size = 50, replace = FALSE)
+  subdat <- Landnutzung[idx, ]
+  m_sub <- lm(Recreation ~ Settlement, data = subdat)
+  sh <- shapiro.test(resid(m_sub))
+  p_werte[i] <- sh$p.value
+  if(sh$p.value < 0.05){
+    Ablehung_Haeufigkeit <- Ablehung_Haeufigkeit + 1
+  }
+}
+Ablehung_Haeufigkeit
+
+```
+
+## Was sagt uns das?
+Die Nullhypothese wird 89 Mal verworfen, was bedeutet, dass der Shapiro-Test in 89% der Fälle von keiner Normalverteilung der Daten ausgeht. Für das Aufstellen eines linearen Regressionsmodells ist jedoch eine Normalverteilung der Residuen Voraussetzung. Damit ist das aufgestelle lineare Regressionsmodell nicht aussagekräftig.
