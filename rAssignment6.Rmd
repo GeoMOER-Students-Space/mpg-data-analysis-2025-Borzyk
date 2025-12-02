@@ -1,0 +1,73 @@
+---
+title: "rAssignment6"
+author: "Borzyk"
+date: "2025-02-12"
+output: html_document
+---
+### Please write an R markdown script, which helps you to statistically evaluate the performance of a simple linear model that predicts the percentage recreation area from the respective settlement area. Therefore, please choose an appropriate cross validation procedure. The procedure should be implemented as a function. Include a plot in the end that provides information on the distribution of the root mean squared error across the different cross validation runs.
+
+Please write exactly one sentence as a summary of the reliability of the model.
+
+Save your Rmd file in your course repository, knitr it, update (i.e. commit) your local repository and publish (i.e. push) it to the GitHub classroom. Make sure that the created html file is also part of your GitHub classroom repository.
+
+Zunächst Daten einlesen und einen Überblick verschaffen - wie schaut die lineare Regressionsgerade des linearen Modells zu allen Daten auf einmal aus?
+```{r}
+Landnutzung <- readRDS("C:/Users/Tobias/Documents/GEOMaster/Data_Analysis/data/lu_clean.rds") 
+lmod <- lm(Landnutzung$Recreation ~ Landnutzung$Settlement)
+plot(Landnutzung$Settlement, Landnutzung$Recreation,
+     ylab = "Erholungsfkächenanteil (in %)",
+     xlab = "Siedlungsflächenanteil (in %)")
+abline(lmod, col = "red")
+```
+
+## Leave-many-out cross validation zum Ausmaß der statistisch zu erwartendenden Erholungsfläche in Bezug gesetzt zur die Siedlungsfläche.
+
+```{r}
+```{r, warning = FALSE, message = FALSE}
+Landnutzung <- readRDS("C:/Users/Tobias/Documents/GEOMaster/Data_Analysis/data/lu_clean.rds") 
+set.seed(2000)
+range <- nrow(Landnutzung)
+nbr <- nrow(Landnutzung) * 0.8
+
+rec_idx <- grep('recre|rec', names(Landnutzung), ignore.case=TRUE)[1]
+set_idx <- grep('settle|sett', names(Landnutzung), ignore.case=TRUE)[1]
+recreation <- Landnutzung[[rec_idx]]
+settlement <- Landnutzung[[set_idx]]
+mask <- complete.cases(recreation, settlement)
+recreation <- recreation[mask]
+settlement <- settlement[mask]
+
+N <- length(recreation)
+N
+
+cv_rmse <- function(y, x, repeats = 100, train_frac = 0.8) {
+  N <- length(y)
+  rmse_vals <- numeric(repeats)
+
+  for (i in seq_len(repeats)) {
+    train_i <- sample(seq_len(N), size = round(train_frac * N), replace = FALSE)
+    test_i  <- setdiff(seq_len(N), train_i)
+
+    y_train <- y[train_i]
+    x_train <- x[train_i]
+    y_test  <- y[test_i]
+    x_test  <- x[test_i]
+
+    m  <- lm(y_train ~ x_train)
+    pr <- predict(m, newdata = data.frame(x_train = x_test))
+
+    rmse_vals[i] <- sqrt(mean((y_test - pr)^2))
+  }
+
+  return(rmse_vals)
+}
+
+errors <- cv_rmse(recreation, settlement, repeats = 100)
+summary(errors)
+hist(errors, breaks = 15, main = "Verteilung des RMSE über 100 Cross-Validation Durchläufe",
+     xlab = "RMSE",
+     ylab = "Häufigkeit")
+abline(v = mean(errors), lty = 2)
+```
+
+Erklärender Satz: Der Root Mean Square Error bewegt sich zwischen etwa 0,85 und 0,125 mit den häufigsten Ausprägungen um 1,075, womit das lineare Modell sehr zuverlässig erscheint.
