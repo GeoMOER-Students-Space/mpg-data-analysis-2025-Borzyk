@@ -1,0 +1,109 @@
+---
+title: "rAssignment8"
+author: "Borzyk"
+date: "2025-12-14"
+output: html_document
+---
+#### For implementing a cross-validation-based and quite simple tuning of an additive model, we go back to the wood harvest data set. The aim is to predict beech harvest from oak harvest.
+
+Write an R markdown script, which tunes the prediction of beech harvest based on oak harvest using an additive model. The tuning should run over the number of knots between 3 and 13, and the estimate of the model performance for each knot should be based on a 100 times cross validation with 80 percent of the data set as training and the rest as testing samples. The cross validation should be reproducible. Please visualize (i) the root mean square error, (ii) the root mean square error +/- it’s standard deviation and (iii) the adjusted R squared as a function of increasing knots (i.e. knots should be on the x axis). Since the root mean square error is much larger than the R squared values, normalize the root mean square errors to its maximum for the visualization.
+
+Zunächst Einladen des Datensets
+```{r}
+Holzeinschlag_Hessen <- read.csv(
+  file = "C:/Users/Tobias/Documents/GEOmaster/Data_Analysis/data/hessen_holzeinschlag_1997-2014.csv",
+  header = TRUE,
+  sep = ";",
+  skip = 4 ,
+  encoding = "latin1")
+
+Holzeinschlag_Hessen <- Holzeinschlag_Hessen[-19, ]
+```
+Aufteilung der relevanten Daten in unabhängige Variable "Buche" und unabhägige Variable "Eiche".
+```{r}
+library(mgcv)
+
+Buche <- Holzeinschlag_Hessen$Buche #abhängige Variable
+Eiche <- Holzeinschlag_Hessen$Eiche #unabhängige Variable
+df_Eiche_Buche <- na.omit(data.frame(Buche = Buche,
+                         Eiche = Eiche)
+                         )
+
+```
+
+additive model für die Vorhersage von Buchenabholzung abhängig von der gleichzeitigen Eichenabholzungsmengen.
+
+```{r}
+set.seed(542)
+knots <- seq(3, 13)
+rmse_mean <- numeric(length(knots))
+rmse_sd   <- numeric(length(knots))
+adj_r2    <- numeric(length(knots))
+
+# Nun der zentrale Loop
+
+for (i in seq(knots)) {
+  
+  rmse_cv <- numeric(100)
+  
+  for (cv in 1:100) {
+    
+    smpl <- sample(seq_len(nrow(df_Eiche_Buche)), size = 0.8 * nrow(df_Eiche_Buche))
+    train <- df_Eiche_Buche[smpl, ]
+    test  <- df_Eiche_Buche[-smpl, ]
+    
+    gammod <- gam(Buche ~ s(Eiche, k = knots[i], fx = TRUE), 
+                  data = train)
+    
+    pred <- predict(gammod, newdata = test) 
+    obsv <- test$Buche
+    
+    rmse_cv[cv] <- sqrt(mean((obsv - pred)^2))
+  }
+  
+  rmse_mean[i] <- mean(rmse_cv)
+  rmse_sd[i]   <- sd(rmse_cv)
+  adj_r2[i]    <- summary(gammod)$r.sq
+}
+
+
+
+rmse_mean_norm <- rmse_mean / max(rmse_mean)
+rmse_sd_norm   <- rmse_sd   / max(rmse_mean)
+```
+
+#### i) Plot für "the root mean square error"
+
+```{r}
+plot(knots, rmse_mean_norm, type = "b",
+     xlab = "Nummer der knots",
+     ylab = "Normalisierte RMSE",
+     main = "Normalisierte RMSE gg. Knots")
+```
+
+#### ii) Plot für the root mean square error +/- it’s standard deviation and 
+
+```{r}
+plot(knots, rmse_mean_norm, type = "b",
+     ylim = range(c(rmse_mean_norm - rmse_sd_norm,
+                    rmse_mean_norm + rmse_sd_norm)),
+     xlab = "Nummer der knots",
+     ylab = "Normalisierte RMSE",
+     main = "RMSE ± SD gg. Knots")
+
+arrows(knots,
+       rmse_mean_norm - rmse_sd_norm,
+       knots,
+       rmse_mean_norm + rmse_sd_norm,
+       angle = 90, code = 3, length = 0.05)
+```
+
+#### iii) Plot für adjusted R squared as a function of increasing knots 
+```{r}
+
+plot(knots, adj_r2, type = "b",
+     xlab = "Nummer der knots",
+     ylab = "Adjusted R²",
+     main = "Adjusted R² gg. Knots")
+```
+

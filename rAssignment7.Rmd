@@ -51,6 +51,7 @@ variablen <- c("x1", "x2", "x3", "x4", "x5", "x6", "x7", "x8", "x9")
 ```
 Loop für forward_feature_selection
 ```{r}
+set.seed(542)
 forward_fs <- function(df_simpl, dep, vars, mode = c("AIC","CV4")) {
   mode <- match.arg(mode)
   
