@@ -1,0 +1,150 @@
+---
+title: "rAsignment9"
+author: "Tobias Borzyk"
+date: "2026-01-11"
+output: html_document
+---
+
+### For the model selection, any ARIMA parameter combination of p, d, q and the corresponding seasonal components ps, ds, qs should be tested for
+
+###p between 0 and 5,
+###d between 0 and 2,
+###q between 0 and 5,
+###ps between 0 and 2,
+###ds between 0 and 2, and
+###qs between 0 and 2.
+###Please write an Rmd file with html output in which the performance for predicting monthly precipitation of an ARIMA model with all of the possible parameter combinations above is tested.
+
+###The performance should be tested using the RMSE between predicted and observed monthly precipitation for the last two full years of the dataset. Please print the parameters (i.e. p, d, q…) as well as the AIC and RMSE of your optimal model and compare them with the corresponding values retrieved using the forecast::auto.arima function (for the latter you can just use the summary function although it gives more information than necessary). Please also visualize the prediction of your model and the automatically retrieved one in a simple plot (one for each model) and add the actually observed values to the plot. Write a one-sentence-statement about the differences.
+
+
+```{r}
+library("rdwd")  #dt. Wetterdienst-library herunterladen
+
+## Daten herunterladen
+setwd("C:/Users/borzy/Documents/GEOmaster/Data_Analysis")
+data_path <- ("C:/Users/borzy/Documents/GEOmaster/Data_Analysis/data/")
+url <- rdwd::selectDWD(id = "003164", res = "hourly", var = "precipitation", per = "historical")
+rdwd::dataDWD(url, dir = data_path, read = FALSE)
+
+# adapt path to where your file actually is and filename to the downloaded time span, Daten einlesen
+path <- ("C:/Users/borzy/Documents/GEOmaster/Data_Analysis/data/stundenwerte_RR_03164_20060701_20241231_hist/produkt_rr_stunde_20060701_20241231_03164.txt")
+dwd <- read.table(path, header = TRUE, sep = ";", dec = ".")
+# check
+head(dwd)
+
+# Umwandlung des Datums in ein Datum-Objekt
+dwd$DATUM <- strptime(dwd$MESS_DATUM, format = "%Y%m%d%H", tz = "Europe/Berlin")
+head(dwd$MESS_DATUM)
+
+# Entfernen der irrelevanten Zeilen mit -999 im Datensatz
+dwd <- dwd[dwd$R1 != -999, ]
+dwd <- dwd[dwd$RS_IND != -999, ]
+
+## neues Dataset mit nur Datum und R1 Spalten erstellen
+dwd_ns <- dwd[, c("DATUM", "R1")]
+
+# R1 data nach Monaten auswählen
+dwd$AGG_M <- substr(dwd$MESS_DATUM, 5, 6) 
+boxplot(dwd$R1 ~ dwd$AGG_M)
+
+#Summe der monatlichen Niederschlagsmenge berechnen
+dwd$AGG_JM <- substr(dwd$MESS_DATUM, 1, 6) #Auswahl nach Jahr und Monat
+rpm <- aggregate(dwd$R1, by = list(dwd$AGG_JM), FUN = sum) #Summe des Niederschlags nach Monat berechnen
+colnames(rpm) <- c("Date", "Precipitation") #Umbennen der Spalten
+head(rpm) #check
+
+#Timeline erstellen
+#Startjahr und Monat herausfiltern
+start_year <- as.numeric(substr(rpm$Date[1], 1, 4))
+start_month <- as.numeric(substr(rpm$Date[1], 5, 6))
+
+# Zeitreihenobjekt erstellen
+precip_ts <- ts(rpm$Precipitation, start = c(start_year, start_month), frequency = 12)
+
+# plotten der Zeitreihe
+plot(precip_ts, main = "Monthly Precipitation Time Series", ylab = "Precipitation (mm)", xlab = "Time")
+
+#Train- und Testdaten aufteilen
+train_end <- length(precip_ts) - 24 # letzte 2 Jahre testen
+train_ts <- window(precip_ts, end = c(start_year + (train_end - 1) %/% 12, (train_end - 1) %% 12 + 1)) # Training set
+test_ts <- window(precip_ts, start = c(start_year + train_end %/% 12, train_end %% 12 + 1)) # test set
+
+#Parameter-Range bestimmen
+params <- expand.grid(p = 0:5, d = 0:2, q = 0:5, ps = 0:2, ds = 0:2, qs = 0:2)
+
+# Vektoren für AIC und RMSE initialisieren
+params$AIC  <- NA
+params$RMSE <- NA
+
+# loop über alle Parameterkombinationen
+for (i in 1:nrow(params)) {
+    fit <- suppressWarnings(try(arima(train_ts, 
+                     order = c(params$p[i], params$d[i], params$q[i]),
+                     seasonal = list(order = c(params$ps[i],
+                                               params$ds[i],
+                                               params$qs[i]),
+                                     period = 12)),
+               silent = TRUE)
+    )
+    if (inherits(fit, "try-error")) next
+    
+    # nächste 24 monate predicten
+    forecast_values <- predict(fit, n.ahead = 24)$pred # forecast values for next 24 months
+    
+    # RMSE berechnen
+    rmse <- sqrt(mean((test_ts - forecast_values)^2)) #calculate RMSE 
+    
+    # speichern von AIC and RMSE
+    params$AIC[i]  <- AIC(fit) # speichern AIC
+    params$RMSE[i] <- rmse # speichern RMSE
+}
+
+# gefailte Modelle entfernen
+params <- na.omit(params) # NA values entfernen
+
+# optimales model finden
+optimal_index <- which.min(params$RMSE) # index von niedrigstem RMSE
+optimal_params <- params[optimal_index, ] # optimale Parameter
+
+
+# bestes ARIMA model fitten
+best_model <- arima(train_ts, 
+                    order = c(optimal_params$p, optimal_params$d, optimal_params$q), 
+                    seasonal = list(order = c(optimal_params$ps, 
+                                              optimal_params$ds, 
+                                              optimal_params$qs), 
+                                    period = 12))
+# forecast mit bestem Modell
+best_forecast <- predict(best_model, n.ahead = 24)$pred
+
+# bestes modell plotten
+plot(test_ts, type = "l", col = "black", lwd = 2, 
+     main = "Best ARIMA Model Forecast vs Actual", ylab = "Precipitation (mm)", xlab = "Time")
+lines(best_forecast, col = "blue", lwd = 2)
+legend("topright", legend = c("Actual", "Best ARIMA Forecast"), col = c("black", "blue"), lwd = 2)
+
+# Optimale Parameter:
+print(optimal_params)
+
+# Vergleich mit auto.arima
+library(forecast)
+auto_model <- auto.arima(train_ts)
+auto_forecast <- forecast(auto_model, h = 24)
+
+# plotten von auto.arima forecast
+plot(test_ts, type = "l", col = "black", lwd = 2, 
+     main = "Auto ARIMA Model Forecast vs Actual", ylab = "Precipitation (mm)", xlab = "Time")
+lines(auto_forecast$mean, col = "red", lwd = 2)
+legend("topright", legend = c("Actual", "Auto ARIMA Forecast"), col = c("black", "red"), lwd = 2)
+
+summary(auto_model)
+
+# One-sentence statement about differences
+# Das auto.arima modell hat eine höhere RMSE als das optimae ARIMA Model, ist also aussagekräftiger.
+```
+
+
+
+
+
