@@ -1,0 +1,153 @@
+---
+title: "03 Cross Validation"
+author: "Tobias Borzyk"
+date: "2026-01-27"
+output: html_document
+---
+
+Vorbereitung
+```{r}
+# Start with a clean workspace
+rm(list=ls(all=TRUE))
+
+# Set your individual information
+matriculationnumber <- 3399925
+lastname <- "Borzyk"
+
+# Read in the original data
+lu <- readRDS("C:/Users/borzy/Documents/GEOmaster/Data_Analysis/data/lu_clean.rds")
+
+# Individual modifications
+set.seed(matriculationnumber)
+lu[paste("Agriculture", lastname, sep="_")] <- abs(jitter(lu$Agriculture, amount = matriculationnumber/10^6))
+lu[paste("Settlement", lastname, sep="_")] <- abs(jitter(lu$Settlement, amount = matriculationnumber/10^6))
+lu$Agriculture <- NULL; lu$Settlement <- NULL
+
+# Create an individual dataset object for this topic
+assign(paste("lu", lastname, sep="_"), lu[sample(nrow(lu), nrow(lu) - 99),]); rm(lu)
+
+# Now start working with your individual dataset called
+paste("lu", lastname, sep="_")
+```
+
+## 1. Write a function for a leave-many-out cross validation which uses 75% of the data for training and the rest for testing. Provide the root mean squared error between prediction and observation of 115 iterations, each with independently sampled data, as function output.
+```{r}
+leave_many_out_cv <- function(data, formula, n_iter = 115, train_frac = 0.75, seed = NULL) {
+  
+  if (!is.null(seed)) set.seed(seed)
+  
+  # Nur vollständige Fälle für alle Variablen im Modell
+  data <- data[complete.cases(model.frame(formula, data)), ]
+  
+  n <- nrow(data)
+  rmse <- numeric(n_iter)
+  
+  for (i in seq_len(n_iter)) {
+    
+    train_idx <- sample(seq_len(n), size = floor(train_frac * n))
+    train_data <- data[train_idx, ]
+    test_data  <- data[-train_idx, ]
+    
+    model <- lm(formula, data = train_data)
+    
+    # Sicherstellen, dass Testdaten wieder vollständige Fälle sind (bei Sicherheit)
+    test_mf <- model.frame(formula, test_data)
+    obs <- model.response(test_mf)
+    pred <- predict(model, newdata = test_mf)
+    
+    rmse[i] <- sqrt(mean((pred - obs)^2))
+  }
+  
+  rmse
+}
+
+```
+
+## 2. The results should be reproducible.
+```{r}
+set.seed(3399925)
+rmse_values <- leave_many_out_cv(
+  data = lu_Borzyk,
+  formula = Settlement_Borzyk ~ Agriculture_Borzyk
+)
+
+```
+
+## 3. Include a visualisation which provides information on the distribution of the root mean squared error across the different cross-validation runs.
+```{r}
+hist(
+  rmse_values,
+  main = "Distribution of RMSE across 115 cross-validation runs",
+  xlab = "RMSE",
+  breaks = "FD"
+)
+abline(v = mean(rmse_values), col = "red", lwd = 2)
+
+```
+
+## 4. Write up to 50 words which interpret the results.
+Die Verteilung der RMSE-Werte über 115 Cross-Validation-Durchläufe ist gleichmäßig und weist auf eine stabile Modellperformance gegenüber unterschiedlichen Trainings- und Teststichproben hin. der RMSE ist nur geringfügig unterschiedlich.
+## 5. Add an argument to your function which allows to set the percentage of training data in the function call. Provide a visualisation showing the change of the root mean squared error with increasing percentage of training data for seed 20260127. What do the results tell us about the leave-many-out cross validation as implemented here?
+```{r}
+leave_many_out_cv <- function(data, formula, n_iter = 115, train_frac = 0.75, seed = NULL) {
+  
+  if (!is.null(seed)) set.seed(seed)
+  
+  # nur vollständige Fälle der Modellvariablen
+  data <- data[complete.cases(model.frame(formula, data)), ]
+  
+  n <- nrow(data)
+  rmse <- numeric(n_iter)
+  
+  for (i in seq_len(n_iter)) {
+    train_idx  <- sample(seq_len(n), size = floor(train_frac * n))
+    train_data <- data[train_idx, ]
+    test_data  <- data[-train_idx, ]
+    
+    model <- lm(formula, data = train_data)
+    
+    # konsistente Testbasis für obs/pred
+    test_mf <- model.frame(formula, test_data)
+    obs  <- model.response(test_mf)
+    pred <- predict(model, newdata = test_mf)
+    
+    rmse[i] <- sqrt(mean((pred - obs)^2))
+  }
+  
+  rmse
+}
+
+
+
+train_fracs <- seq(0.50, 0.95, by = 0.05)
+
+res <- data.frame(
+  train_frac = train_fracs,
+  mean_rmse  = NA_real_,
+  sd_rmse    = NA_real_
+)
+
+for (j in seq_along(train_fracs)) {
+  rmse_j <- leave_many_out_cv(
+    data = lu_Borzyk,
+    formula = Settlement_Borzyk ~ Agriculture_Borzyk,
+    n_iter = 115,
+    train_frac = train_fracs[j],
+    seed = 20260127
+  )
+  res$mean_rmse[j] <- mean(rmse_j)
+  res$sd_rmse[j]   <- sd(rmse_j)
+}
+
+# Visualisierung: mittlerer RMSE (optional mit Streuung)
+plot(res$train_frac, res$mean_rmse, type = "b",
+     xlab = "Anteil Trainingsdaten",
+     ylab = "Mittlerer RMSE (über 115 Läufe)",
+     main = "RMSE vs. Trainingsanteil (Seed 20260127)")
+
+arrows(res$train_frac, res$mean_rmse - res$sd_rmse,
+       res$train_frac, res$mean_rmse + res$sd_rmse,
+       angle = 90, code = 3, length = 0.05)
+
+```
+Mit zunehmendem Anteil der Trainingsdaten nimmt der mittlere RMSE tendenziell ab, was auf eine verbesserte Modellanpassung hinweist. Gleichzeitig steigt bei sehr hohen Trainingsanteilen die Varianz der RMSE-Schätzung, da nur wenige Testbeobachtungen verbleiben.
