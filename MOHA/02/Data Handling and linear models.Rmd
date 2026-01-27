@@ -1,0 +1,108 @@
+---
+title: "Data Handling and linear models"
+author: "Tobias Borzyk"
+date: "2026-01-27"
+output: html_document
+---
+Vorbereitung
+```{r}
+# Start with a clean workspace
+rm(list=ls(all=TRUE))
+
+# Set your individual information
+matriculationnumber <- 3399925
+lastname <- "Borzyk"
+
+# Read in the original data
+lu <- readRDS("C:/Users/borzy/Documents/GEOmaster/Data_Analysis/data/lu_clean.rds")
+
+# Individual modifications
+set.seed(matriculationnumber)
+lu[paste("Agriculture", lastname, sep="_")] <- abs(jitter(lu$Agriculture, amount = matriculationnumber/10^6))
+lu[paste("Settlement", lastname, sep="_")] <- abs(jitter(lu$Settlement, amount = matriculationnumber/10^6))
+lu$Agriculture <- NULL; lu$Settlement <- NULL
+
+# Create an individual dataset object for this topic
+assign(paste("lu", lastname, sep="_"), lu[sample(nrow(lu), nrow(lu) - 99),]); rm(lu)
+
+# Now start working with your individual dataset called
+paste("lu", lastname, sep="_")
+```
+#1. Evaluate the results of a simple linear model that predicts the percentage of settlement area (dependent variable) from the respective percentage of agriculture area at the federal administrative level. Therefore,
+#1.1 subset the data and use all entries with “Bundesland” as administrative unit to calculate a simple linear model
+```{r}
+lu_Bundesland <- subset(lu_Borzyk,Admin_unit == "Bundesland")
+### Entfernen fälschlich als BL deklarierter LKs und Kreisfreier Städte in Bayern + Aachen
+lu_Bundesland <- subset(
+  lu_Borzyk,
+  Admin_unit == "Bundesland" & nchar(as.character(ID)) == 2
+)
+lmBL <- lm(Settlement_Borzyk ~ Agriculture_Borzyk, data = lu_Bundesland)
+```
+#1.2 print the p-value and the adjusted R-squared value of this model
+```{r}
+print(summary(lmBL)$coefficients[2,4]) # p-value
+print(summary(lmBL)$adj.r.squared) # adjusted R-squared
+```
+
+#1.3 check, if the requirements for calculating linear models are fulfilled
+```{r}
+car::ncvTest(lmBL)
+
+plot(lmBL, which = 2)   # Normal Q-Q
+
+plot(lmBL, which = 1) # Residuals vs Fitted
+```
+
+#1.4 interpret the results with up to 50 words.
+
+Es besteht bei einem p-Wert von ca. 0,159 keine Heteroskedastizität.
+Die Residuen sind vermutlich normalverteilt, wobei bei der linke und rechte Rand grenzwertig abweichen.
+Die Residuen zeigen eher keine erkennbare lineare Beziehung, bzw. 3 WOlken an Residuen, die untereinander vermutlich linear korrelieren.
+Da die Residuen zu große Abweichungen aufweisen, ist das Modell nur bedingt geeignet.
+
+# 2.Calculate the average settlement area per administrative unit and year by aggregation.
+
+```{r}
+avg_settlement <- aggregate(
+  Settlement_Borzyk ~ Place + Year,
+  data = lu_Borzyk,
+  FUN = mean,
+  na.rm = TRUE
+)
+```
+#3. Use the above aggregated dataset to test for each administrative unit if the percentage of settlement area has increased over time. In particular, calculate simple linear models with “Year” as predictor and count the amount of positive and negative slopes (do NOT care about requirements for linear models and significance here), create scatterplots with regression lines (blue for negative slope, red for positive slope) for each administrative unit and present them in a single figure, and interpret the results in up to three sentences.
+
+```{r}
+library(dplyr)
+library("ggplot2")
+places <- unique(avg_settlement$Place)
+
+slopes <- sapply(places, function(p) {
+  dat <- subset(avg_settlement, Place == p)
+  coef(lm(Settlement_Borzyk ~ Year, data = dat))[2]
+})
+
+sum(slopes > 0, na.rm = TRUE)
+sum(slopes < 0, na.rm = TRUE)
+
+par(mfrow = c(3, 3))
+
+for (p in places) {
+  dat <- subset(avg_settlement, Place == p)
+  dat <- dat[complete.cases(dat[, c("Year", "Settlement_Borzyk")]), ]
+  
+  if (nrow(dat) < 2 || length(unique(dat$Year)) < 2) next
+  
+  model <- lm(Settlement_Borzyk ~ Year, data = dat)
+  b <- coef(model)[2]
+  
+  plot(dat$Year, dat$Settlement_Borzyk, main = p,
+       xlab = "Year", ylab = "Average Settlement Area")
+  abline(model, col = ifelse(is.finite(b) && b > 0, "red", "blue"), lwd = 2)
+}
+
+
+```
+
+# Interpretation: Insgesamt hat die Siedlungsfläche deutlich zugenommen, dennoch haben einige Verwaltungseinheiten (108 gegenüber der Mehrheit von 354) eine abnehmende Siedlungsfläche, das heißt der Zuwachs muss sehr unterschiedlich verteilt sein

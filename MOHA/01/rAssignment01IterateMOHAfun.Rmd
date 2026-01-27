@@ -1,0 +1,51 @@
+---
+title: "01 Iterate MOHAfun()"
+author: "Tobias Borzyk"
+date: "2026-01-27"
+output: html_document
+---
+# 01 Iterate MOHAfun() -  Exercises focussing on implementing simple functions and control structures.
+1. Implement a function called MOHAfun() which returns “larger” if the number provided as variable x is larger than your matriculation number, “equal” if the number provided as variable x is your matriculation number, and “smaller” if the number provided as variable x is smaller than your matriculation number.
+```{r}
+MOHAfun <- function(x){
+  Matrikelnummer <- 3399925
+  if (x > Matrikelnummer){
+    return("larger")
+  } else if (x == Matrikelnummer){
+    return("equal")
+  } else if (x < Matrikelnummer){
+    return("smaller")
+  }
+}
+```
+
+2. Include MOHAfun() in a for loop which iterates over x in an intervall of 10 integer numbers around your matriculation number. Show the results.
+
+```{r}
+numbers_intervall <- 3399920:3399929
+ergebnis_numbers_intervall <- list()
+
+for (x in numbers_intervall){
+  cat("For x =", x, "the result is:", MOHAfun(x), "\n")
+}
+```
+
+3. Change the above created loop in such a way that the iteration is controlled by a lapply not by a for-loop. Save the returning information from the lapply function in a variable and print the content of this variable after the loop.
+```{r}
+ergebnis_numbers_intervall_lapply <- lapply(numbers_intervall, MOHAfun)
+print(ergebnis_numbers_intervall_lapply)
+```
+
+4. Adjust MOHAfun() by adding y as additional argument instead of your matriculation number in order to allow x to be compared with any input.
+```{r}
+MOHAfun <- function(x,y){
+  if (x > y){
+    return("larger")
+  } else if (x == y){
+    return("equal")
+  } else if (x < y){
+    return("smaller")
+  }
+}
+```
+
