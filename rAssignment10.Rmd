@@ -1,0 +1,155 @@
+---
+title: "rAssignment10"
+author: "Tobias Borzyk"
+date: "2026-01-19"
+output: html_document
+---
+
+# r Assignment 10 Analyse Time Series
+
+Please write an Rmd file with html output, which computes the trend of the air temperature recorded in Cölbe based on monthly values between January 1950 and December 1990 (we stop here because afterwards, there is a gap in the time series, which could be filled in principle but not as part of this task)
+Please extend your Rmd file in such a manner that you can evaluate to which degree the dynamics in the seasonal temperature over each year can be explained by fluctuations of the North Atlantic Oscillation. For this task, divide the NAO index provided above into “positive” and “negative” (i.e. use it as a factor, not as a numeric variable) and predict the temperature dynamics in a simple multiple linear model, which uses the NAO index classes as a factor and the first Fourier frequency (i.e. one sin and one cos) as independent variables. Finally, develop a strategy to cross-check the significance indicated by the linear model.
+
+```{r}
+library("rdwd")  #dt. Wetterdienst-library implementieren
+
+## Daten herunterladen und einlesen
+setwd("C:/Users/borzy/Documents/GEOmaster/Data_Analysis")
+data_path <- ("C:/Users/borzy/Documents/GEOmaster/Data_Analysis/data/")
+url <- rdwd::selectDWD(id = "03164", res = "monthly", var = "kl", per = "historical")
+rdwd::dataDWD(url, dir = data_path, read = FALSE)
+
+# adapt path to where your file actually is and filename to the downloaded time span, Daten einlesen, manuell entzippen
+path <- ("C:/Users/borzy/Documents/GEOmaster/Data_Analysis/data/monthly_kl_historical_monatswerte_KL_03164_18810101_20241231_hist/produkt_klima_monat_18810101_20241231_03164.txt")
+dwd <- read.table(path, header = TRUE, sep = ";", dec = ".")
+# check
+head(dwd)
+nao <- read.table(file.path(data_path,
+  "nao_indextim.sec.txt"),
+  header = TRUE,
+  skip = 8,
+  sep = "",
+  na.strings = "-99.90",
+  stringsAsFactors = FALSE
+)
+head(nao)
+
+#Fehlwerte lösche
+dwd <- dwd[dwd$MO_TT != -999, ]
+dwd <- dwd[dwd$MO_TX != -999, ]
+dwd <- dwd[dwd$MO_TN != -999, ]
+
+#Extrahieren relevanter Spalten
+dwd <- dwd[, c(2,6,7,8)]
+
+#Umbenennung in kürzere Namen
+colnames(dwd) <- c("Monat", "T_Mittel", "T_Max", "T_Min")
+
+dwd$Monat <- as.Date(as.character(dwd$Monat), format = "%Y%m%d")
+
+#Zeitraum zwischen 1950 und 1990 bringen
+dwd <- dwd[dwd$Monat >= "1950-01-01" &
+           dwd$Monat <= "1990-12-01", ]
+# Libraries für Visualisierung und Co
+library(tidyr)
+library(dplyr)
+library(ggplot2)
+
+# Womit haben wir es zu tun? Plot der mittleren monatlichen Temperatur in Cölbe
+plot(dwd$Monat, dwd$T_Mittel, type = "l", xlab="Jahr", ylab="Temperatur (in °C)", main="Mittlere monatliche Temp. in Coelbe", col="red")
+
+
+```
+
+### Trend Berechnung für 1950-1990 
+
+```{r}
+# Hilfsvariablen
+dwd <- dwd %>%
+  arrange(Monat) %>%
+  mutate(
+    t = seq_len(n()),                       # Zeitindex (Monate)
+    m = as.integer(format(Monat, "%m")),    # Monat (1..12)
+    sindwd = sin(2*pi*m/12),                  # 1. Fourier-Frequenz
+    cosdwd = cos(2*pi*m/12)
+  )
+
+# Trendmodell: Temperatur ~ Trend + Saison (sin/cos)
+m_trend <- lm(T_Mittel ~ t + sindwd + cosdwd, data = dwd)
+summary(m_trend)
+
+# Trend in °C pro Jahr und pro Dekade
+beta_month <- coef(m_trend)["t"]
+trend_year  <- beta_month * 12
+trend_dec   <- beta_month * 120
+
+trend_year
+trend_dec
+
+```
+Der Jahrestrend beträgt eine Steigerung von etwa 0.0274 °C pro Jahr bzw. 0.274 °C pro Dekade im Zeitraum von 1950 bis 1990.
+### Aufbereitung von NAO data
+```{r}
+
+library(dplyr)
+library(tidyr)
+
+
+nao2 <- nao %>%
+  transmute(
+    Year = as.integer(YEAR),
+    month_num = as.integer(MONTH),
+    NAO = as.numeric(INDEX),
+    Date = as.Date(sprintf("%04d-%02d-01", Year, month_num)),
+    Sign = factor(ifelse(NAO < 0, "negative", "positive"),
+                  levels = c("negative", "positive"))
+  ) %>%
+  filter(Date >= as.Date("1950-01-01"),
+         Date <= as.Date("1990-12-01")) %>%
+  select(Date, NAO, Sign)
+
+# Join mit DWD über Datum (ohne doppelt sin und cos)
+dat <- dwd %>%
+  rename(Date = Monat) %>%
+  left_join(nao2 %>% select(Date, NAO, Sign), by = "Date") %>%
+  mutate(
+    m = as.integer(format(Date, "%m")),
+    sin1 = sin(2*pi*m/12),
+    cos1 = cos(2*pi*m/12)
+  )
+
+# Kontrolle: sollten 0 NAs sein
+sum(is.na(dat$Sign))
+head(dat)
+
+
+m0 <- lm(T_Mittel ~ sin1 + cos1, data = dat)                 # nur Saison
+m1 <- lm(T_Mittel ~ Sign + sin1 + cos1, data = dat)          # Saison + NAO-Klasse
+
+anova(m0, m1)   # Zusatznutzen von NAO-Klasse
+summary(m1)
+
+dat$month <- as.integer(format(dat$Date, "%m"))
+# Permutationstest
+m_obs <- lm(T_Mittel ~ Sign + sin1 + cos1, data=dat)
+t_obs <- summary(m_obs)$coefficients["Signpositive","t value"]
+
+B <- 2000
+t_perm <- numeric(B)
+
+set.seed(1)
+for(b in 1:B){
+  perm <- dat
+  perm$Sign <- unlist(tapply(perm$Sign, perm$month, sample))  # permutiere innerhalb Monat
+  m_b <- lm(T_Mittel ~ Sign + sin1 + cos1, data=perm)
+  t_perm[b] <- summary(m_b)$coefficients["Signpositive","t value"]
+}
+
+p_perm <- mean(abs(t_perm) >= abs(t_obs))
+p_perm
+
+adj0 <- summary(m0)$adj.r.squared
+adj1 <- summary(m1)$adj.r.squared
+delta_adj_r2 <- adj1 - adj0
+delta_adj_r2
+```
